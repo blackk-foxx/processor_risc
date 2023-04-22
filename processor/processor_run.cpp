@@ -1,4 +1,5 @@
-#include "systemc.h"
+#include <systemc.h>
+#include <unistd.h>
 
 #include "processor.cpp"
 
