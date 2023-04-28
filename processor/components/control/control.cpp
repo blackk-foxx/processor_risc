@@ -66,10 +66,13 @@ SC_MODULE(control) {
 			sensitive << clock.pos();
 		}	
 
+        unsigned getCycleCount() const { return cycleCount; }
+
 	private:
 		//-- Local variables --//
 		int curState = 0;
 		bool restartPipe = false;
+        unsigned cycleCount = 0;
 
 		//-- Methods for making pipeline easy --//
 
@@ -130,6 +133,7 @@ void control::afterRIWrite() {
 }
 
 void control::state_machine() {
+    ++cycleCount;
 	switch(curState) {
 		// Write instruction in the bus
 		case 0:

@@ -9,31 +9,18 @@
 #include <vector>
 #include <map>
 
-int sc_main(int argn, char * argc[]){
-
+int sc_main(int argn, char * argc[])
+{
 	cout << "Loading processor..." << endl;
 	sleep(1);
 
 	processor p("PROC", argc[1]);
 
-    // TODO: Use an sc_clock here instead of manually driving the clock
-    // signal
-	sc_signal<bool> clock;
+    sc_start();
 
-	p.clock(clock);
-
-	int numberCycles = 0;
-
-	while (not sc_end_of_simulation_invoked()) {
-		clock = 0;
-		sc_start(1, SC_NS);
-		clock = 1;
-		sc_start(1, SC_NS);
-		numberCycles++;
-	}
-	
-	cout << "\nFinished after " << numberCycles - 4 << " cicles. Final state:\n" << endl;	
-
+    cout << endl;
+    cout << "Completed in " << p.CONTROL.getCycleCount() << " cycles." << endl;
+    cout << endl;    
 	cout << "/******* REGISTERS ********/" << endl;
 	p.REGISTERS.print(10);
 	cout << "/******* MEMORY ********/" << endl;

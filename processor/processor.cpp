@@ -87,8 +87,8 @@ SC_MODULE(processor) {
 	pipeline_reg PIPELINESE{"PIPELINESE"}; 				// Pipeline register search-exec 
 	instruction_register RI{"INSTREG"};
 
-	//-- Signals --//
-	sc_in<bool> clock;	
+	//-- Clock --//
+	sc_clock clock;	
 
 	//-> Control signals
 	sc_signal<bool> sigEnableIM;
@@ -301,7 +301,7 @@ SC_MODULE(processor) {
 
 
 		//-- Sentivity list --//
-		sensitive << clock.pos();
+		sensitive << clock;
 		
 		//-- Instruction's file read system --//
 		std::ifstream ifs;
