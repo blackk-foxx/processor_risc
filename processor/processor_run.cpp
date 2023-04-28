@@ -15,7 +15,9 @@ int sc_main(int argn, char * argc[]){
 	sleep(1);
 
 	processor p("PROC", argc[1]);
-	
+
+    // TODO: Use an sc_clock here instead of manually driving the clock
+    // signal
 	sc_signal<bool> clock;
 
 	p.clock(clock);

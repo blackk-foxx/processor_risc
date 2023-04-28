@@ -8,6 +8,7 @@
 #include <fstream>
 #include <stdlib.h>
 
+// TODO: Make each of these separately-built and tested libs
 #include "components/multiplex/multiplex3.cpp"
 #include "components/multiplex/multiplex2.cpp"
 #include "components/ula/ula.h"

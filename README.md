@@ -41,3 +41,7 @@ Finally, execute the ./processor_run program, passing a file with a list of inst
 of algorithms for this processor, take a look at the folder "processor/tests".
 
 Any suggestions or doubts, please refer to my e-mail, greati@ufrn.edu.br.
+
+## Problems to solve
+* How to auto-gen a system diagram from SystemC, or auto-gen a diagram and SystemC code from a single source
+* How to visualize the state of the system while debugging
