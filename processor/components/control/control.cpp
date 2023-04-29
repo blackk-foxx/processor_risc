@@ -176,19 +176,18 @@ void control::state_READY_TO_EXECUTE() {
 
 void control::handleOpcode(unsigned opcode) 
 {
-    if (opcode == opcode::LD || opcode == opcode::LRI) {
+    if (opcode == opcode::LRI) {
         prepareWriteRB();
-        if (opcode == opcode::LRI) {
-            immediateRegister.write(opd.read());
-            immediateValue.write(of1.read());
-            seletorMultiRBW.write(2);
-            state = &control::state_RESULT_READY;
-        } else if (opcode == opcode::LD) {
-            prepareReadDM();
-            seletorMultiRBW.write(1);
-            seletorMultiDM.write(1);
-            state = &control::state_READY_TO_LOAD;
-        }
+        immediateRegister.write(opd.read());
+        immediateValue.write(of1.read());
+        seletorMultiRBW.write(2);
+        state = &control::state_RESULT_READY;
+    } else if (opcode == opcode::LD) {
+        prepareWriteRB();
+        prepareReadDM();
+        seletorMultiRBW.write(1);
+        seletorMultiDM.write(1);
+        state = &control::state_READY_TO_LOAD;
     } else if (opcode == opcode::ST) {
         prepareReadRB();
         seletorMultiDM.write(0);
