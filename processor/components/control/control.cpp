@@ -70,7 +70,7 @@ SC_MODULE(control) {
 
 	private:
 		//-- Local variables --//
-        void (control::*state)() = &control::state_READ_IM;
+        void (control::*state)() = &control::state_INITIAL;
 		bool restartPipe = false;
         unsigned cycleCount = 0;
 
@@ -78,26 +78,26 @@ SC_MODULE(control) {
 
 		/*
 		 * Prepare components so that, in the next cycle,
-		 * the instruction is available on the bus.
+		 * the instruction will be available.
 		 * * */
-		void prepareInstToBus();
+		void prepareReadInstFromIM();
 
 		/* Prepare components so that the instruction
-		 * is stored in the instruction register in
+		 * will be loaded into the instruction register in
 		 * the next cycle.
 		 * * */
-		void prepareInstBusToRI();
+		void prepareLoadRI();
 
-		/* Prepare components so that the decodified instruction
-		 * is written in the pipeline register.
+		/* Prepare components so that the decoded instruction
+		 * will be loaded into the pipeline register.
 		 * **/
-		void prepareRItoRPL();
+		void prepareLoadRPL();
 
 		/* Make the instruction waits when reaches the cycle
 		 * before the pipeline register (for pipeline purposes
 		 * only).
 		 * **/
-		void stopPipePropagation();
+		void stallPipe();
 
         void prepareJump();
         void prepareConditionalJump();
@@ -109,16 +109,16 @@ SC_MODULE(control) {
 		 * **/
 		void state_machine();
 
-        void state_READ_IM();
-        void state_LOAD_IR();
-        void state_LOAD_RPL();
-        void state_READ_NEXT_INST();
-        void state_PREP_EXECUTION();
-        void state_EXEC_ALU();
-        void state_EXEC_STORE();
-        void state_EXEC_JUMP();
-        void state_STORE_ALU_RESULTS();
-        void state_EXEC_LOAD();
+        void state_INITIAL();
+        void state_INST_READY();
+        void state_IR_HAS_INST();
+        void state_RPL_READY();
+        void state_READY_TO_EXECUTE();
+        void state_READY_TO_COMPUTE();
+        void state_READY_TO_STORE();
+        void state_READY_TO_JUMP();
+        void state_RESULT_READY();
+        void state_READY_TO_LOAD();
 
 };
 
@@ -127,34 +127,34 @@ void control::state_machine() {
     (*this.*state)();
 }
 
-void control::state_READ_IM() {
-    prepareInstToBus();
-    state = &control::state_LOAD_IR;
+void control::state_INITIAL() {
+    prepareReadInstFromIM();
+    state = &control::state_INST_READY;
 }
 
-void control::state_LOAD_IR() {
-    prepareInstBusToRI();
-    state = &control::state_LOAD_RPL;
+void control::state_INST_READY() {
+    prepareLoadRI();
+    state = &control::state_IR_HAS_INST;
 }
 
-void control::state_LOAD_RPL() {
+void control::state_IR_HAS_INST() {
     if (restartPipe) {
         restartPipe = false;
-        state = &control::state_READ_IM;
+        state = &control::state_INITIAL;
     } else { 
-        prepareRItoRPL();
-        state = &control::state_READ_NEXT_INST;
+        prepareLoadRPL();
+        state = &control::state_RPL_READY;
     }
 }
 
-void control::state_READ_NEXT_INST() {
+void control::state_RPL_READY() {
     enableRPL.write(0);
-    prepareInstToBus(); // Take new instruction (pipeline)
-    state = &control::state_PREP_EXECUTION;
+    prepareReadInstFromIM(); // Take new instruction (pipeline)
+    state = &control::state_READY_TO_EXECUTE;
 }
 
-void control::state_PREP_EXECUTION() {
-    prepareInstBusToRI(); // Put new instruction on RI (pipeline)
+void control::state_READY_TO_EXECUTE() {
+    prepareLoadRI(); // Put new instruction on RI (pipeline)
     
     // Load operations: can be LRI (immediate) or LD
     if (opcode.read() == 8 || opcode.read() == 13) {
@@ -165,103 +165,103 @@ void control::state_PREP_EXECUTION() {
             immediateRegister.write(opd.read());
             immediateValue.write(of1.read());
             seletorMultiRBW.write(2);
-            state = &control::state_STORE_ALU_RESULTS;
+            state = &control::state_RESULT_READY;
         // LD operation
         } else if (opcode.read() == 8) {
             enableDM.write(1);
             writeDM.write(0);
             seletorMultiRBW.write(1);
             seletorMultiDM.write(1);
-            state = &control::state_EXEC_LOAD;
+            state = &control::state_READY_TO_LOAD;
         }
     // ST operation
     } else if (opcode.read() == 9) {
         enableRB.write(1);
         writeRB.write(0);
-        state = &control::state_EXEC_STORE;
+        state = &control::state_READY_TO_STORE;
         seletorMultiDM.write(0);
     // J operation
     } else if (opcode.read() == 10) {
         prepareJump();
         restartPipe = true;
-        state = &control::state_EXEC_JUMP;
+        state = &control::state_READY_TO_JUMP;
     // JN operation
     } else if (opcode.read() == 11) {
         if (N.read() == 1) {
             prepareConditionalJump();
             restartPipe = true;
         }
-        state = &control::state_EXEC_JUMP;
+        state = &control::state_READY_TO_JUMP;
     // JZ operation
     } else if (opcode.read() == 12) {
         if (Z.read() == 1) {
             prepareConditionalJump();
             restartPipe = true;
         }
-        state = &control::state_EXEC_JUMP;
+        state = &control::state_READY_TO_JUMP;
     // ULA operations
     } else if (opcode.read() != 0) {
         seletorMultiRBW.write(0);
         enableRB.write(1);
         writeRB.write(0);
-        state = &control::state_EXEC_ALU;
+        state = &control::state_READY_TO_COMPUTE;
     } else if (opcode.read() == 0) {
         sc_stop();
     }
 }
 
-void control::state_EXEC_ALU() {
+void control::state_READY_TO_COMPUTE() {
     enableRB.write(1);
     writeRB.write(1);
-    stopPipePropagation();
-    state = &control::state_STORE_ALU_RESULTS;
+    stallPipe();
+    state = &control::state_RESULT_READY;
 }
 
-void control::state_EXEC_STORE() {
+void control::state_READY_TO_STORE() {
     enableDM.write(1);
     writeDM.write(1);
-    stopPipePropagation();
-    state = &control::state_STORE_ALU_RESULTS;
+    stallPipe();
+    state = &control::state_RESULT_READY;
 }
 
-void control::state_EXEC_JUMP() {
+void control::state_READY_TO_JUMP() {
     loadCP.write(0);
-    state = &control::state_LOAD_RPL;
+    state = &control::state_IR_HAS_INST;
 }
 
-void control::state_STORE_ALU_RESULTS() {
+void control::state_RESULT_READY() {
     enableRB.write(0);
     enableDM.write(0);
-    stopPipePropagation();
-    state = &control::state_LOAD_RPL;
+    stallPipe();
+    state = &control::state_IR_HAS_INST;
 }
 
-void control::state_EXEC_LOAD() {
+void control::state_READY_TO_LOAD() {
     enableRB.write(1);
     writeRB.write(1);
-    state = &control::state_STORE_ALU_RESULTS;
+    state = &control::state_RESULT_READY;
 }
 
-void control::prepareInstToBus() {
+void control::prepareReadInstFromIM() {
 	enableIM.write(1);	// Enable IM
 	writeIM.write(0);	// Read from IM
 	enableCP.write(1);	// Increment counter
 }
 
-void control::prepareInstBusToRI() {
+void control::prepareLoadRI() {
 	enableIM.write(0);	// Disable IM
 	enableRI.write(1);	// Enable RI	
 	writeRI.write(1);	// Write IR
 	enableCP.write(0);	// Stop incrementing PC
 }
 
-void control::prepareRItoRPL() {
+void control::prepareLoadRPL() {
 	enableRI.write(0);	// Disable Ri
 	enableRPL.write(1);	// Enable pipeline register 
 	writeRPL.write(1);	// Write pipeline register
 }
 
-void control::stopPipePropagation() {
+void control::stallPipe() {
 	enableRI.write(0);	
 }
 
