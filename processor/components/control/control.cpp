@@ -101,6 +101,12 @@ SC_MODULE(control) {
 
         void prepareJump();
         void prepareConditionalJump();
+        void prepareReadRB();
+        void prepareWriteRB();
+        void prepareReadDM();
+        void prepareWriteDM();
+
+        void handleOpcode(unsigned opcode);
 
 		/* The Mealy's state machine: uses the current
 		 * state and informations from outside in order
@@ -165,64 +171,59 @@ enum opcode {
 
 void control::state_READY_TO_EXECUTE() {
     prepareLoadRI(); // Put new instruction on RI (pipeline)
-    
-    if (opcode.read() == opcode::LD || opcode.read() == opcode::LRI) {
-        enableRB.write(1);
-        writeRB.write(1);
-        if (opcode.read() == opcode::LRI) {
+    handleOpcode(opcode.read());
+}
+
+void control::handleOpcode(unsigned opcode) 
+{
+    if (opcode == opcode::LD || opcode == opcode::LRI) {
+        prepareWriteRB();
+        if (opcode == opcode::LRI) {
             immediateRegister.write(opd.read());
             immediateValue.write(of1.read());
             seletorMultiRBW.write(2);
             state = &control::state_RESULT_READY;
-        } else if (opcode.read() == opcode::LD) {
-            enableDM.write(1);
-            writeDM.write(0);
+        } else if (opcode == opcode::LD) {
+            prepareReadDM();
             seletorMultiRBW.write(1);
             seletorMultiDM.write(1);
             state = &control::state_READY_TO_LOAD;
         }
-    } else if (opcode.read() == opcode::ST) {
-        enableRB.write(1);
-        writeRB.write(0);
-        state = &control::state_READY_TO_STORE;
+    } else if (opcode == opcode::ST) {
+        prepareReadRB();
         seletorMultiDM.write(0);
-    } else if (opcode.read() == opcode::J) {
+        state = &control::state_READY_TO_STORE;
+    } else if (opcode == opcode::J) {
         prepareJump();
-        restartPipe = true;
         state = &control::state_READY_TO_JUMP;
-    } else if (opcode.read() == opcode::JN) {
+    } else if (opcode == opcode::JN) {
         if (N.read() == 1) {
             prepareConditionalJump();
-            restartPipe = true;
         }
         state = &control::state_READY_TO_JUMP;
-    } else if (opcode.read() == opcode::JZ) {
+    } else if (opcode == opcode::JZ) {
         if (Z.read() == 1) {
             prepareConditionalJump();
-            restartPipe = true;
         }
         state = &control::state_READY_TO_JUMP;
-    } else if (opcode.read() == opcode::HALT) {
+    } else if (opcode == opcode::HALT) {
         sc_stop();
     } else {
         // ULA operations
         seletorMultiRBW.write(0);
-        enableRB.write(1);
-        writeRB.write(0);
+        prepareReadRB();
         state = &control::state_READY_TO_COMPUTE;
     }
 }
 
 void control::state_READY_TO_COMPUTE() {
-    enableRB.write(1);
-    writeRB.write(1);
+    prepareWriteRB();
     stallPipe();
     state = &control::state_RESULT_READY;
 }
 
 void control::state_READY_TO_STORE() {
-    enableDM.write(1);
-    writeDM.write(1);
+    prepareWriteDM();
     stallPipe();
     state = &control::state_RESULT_READY;
 }
@@ -240,9 +241,28 @@ void control::state_RESULT_READY() {
 }
 
 void control::state_READY_TO_LOAD() {
+    prepareWriteRB();
+    state = &control::state_RESULT_READY;
+}
+
+void control::prepareReadRB() {
+    enableRB.write(1);
+    writeRB.write(0);
+}
+
+void control::prepareWriteRB() {
     enableRB.write(1);
     writeRB.write(1);
-    state = &control::state_RESULT_READY;
+}
+
+void control::prepareReadDM() {
+    enableDM.write(1);
+    writeDM.write(0);
+}
+
+void control::prepareWriteDM() {
+    enableDM.write(1);
+    writeDM.write(1);
 }
 
 void control::prepareReadInstFromIM() {
@@ -271,7 +291,8 @@ void control::stallPipe() {
 void control::prepareJump() {
     enableCP.write(0);
     loadCP.write(1);
-    jumpValueCP.write(opd);    
+    jumpValueCP.write(opd);
+    restartPipe = true;
 }
 
 void control::prepareConditionalJump() {
