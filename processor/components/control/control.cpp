@@ -153,60 +153,63 @@ void control::state_RPL_READY() {
     state = &control::state_READY_TO_EXECUTE;
 }
 
+enum opcode {
+    HALT = 0,
+    J = 10,
+    JN = 11,
+    JZ = 12,
+    LD = 8,
+    LRI = 13,
+    ST = 9,
+};
+
 void control::state_READY_TO_EXECUTE() {
     prepareLoadRI(); // Put new instruction on RI (pipeline)
     
-    // Load operations: can be LRI (immediate) or LD
-    if (opcode.read() == 8 || opcode.read() == 13) {
+    if (opcode.read() == opcode::LD || opcode.read() == opcode::LRI) {
         enableRB.write(1);
         writeRB.write(1);
-        // LRI operation
-        if (opcode.read() == 13) {
+        if (opcode.read() == opcode::LRI) {
             immediateRegister.write(opd.read());
             immediateValue.write(of1.read());
             seletorMultiRBW.write(2);
             state = &control::state_RESULT_READY;
-        // LD operation
-        } else if (opcode.read() == 8) {
+        } else if (opcode.read() == opcode::LD) {
             enableDM.write(1);
             writeDM.write(0);
             seletorMultiRBW.write(1);
             seletorMultiDM.write(1);
             state = &control::state_READY_TO_LOAD;
         }
-    // ST operation
-    } else if (opcode.read() == 9) {
+    } else if (opcode.read() == opcode::ST) {
         enableRB.write(1);
         writeRB.write(0);
         state = &control::state_READY_TO_STORE;
         seletorMultiDM.write(0);
-    // J operation
-    } else if (opcode.read() == 10) {
+    } else if (opcode.read() == opcode::J) {
         prepareJump();
         restartPipe = true;
         state = &control::state_READY_TO_JUMP;
-    // JN operation
-    } else if (opcode.read() == 11) {
+    } else if (opcode.read() == opcode::JN) {
         if (N.read() == 1) {
             prepareConditionalJump();
             restartPipe = true;
         }
         state = &control::state_READY_TO_JUMP;
-    // JZ operation
-    } else if (opcode.read() == 12) {
+    } else if (opcode.read() == opcode::JZ) {
         if (Z.read() == 1) {
             prepareConditionalJump();
             restartPipe = true;
         }
         state = &control::state_READY_TO_JUMP;
-    // ULA operations
-    } else if (opcode.read() != 0) {
+    } else if (opcode.read() == opcode::HALT) {
+        sc_stop();
+    } else {
+        // ULA operations
         seletorMultiRBW.write(0);
         enableRB.write(1);
         writeRB.write(0);
         state = &control::state_READY_TO_COMPUTE;
-    } else if (opcode.read() == 0) {
-        sc_stop();
     }
 }
 
