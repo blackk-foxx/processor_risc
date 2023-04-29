@@ -99,6 +99,9 @@ SC_MODULE(control) {
 		 * **/
 		void stopPipePropagation();
 
+        void prepareJump();
+        void prepareConditionalJump();
+
 		/* The Mealy's state machine: uses the current
 		 * state and informations from outside in order
 		 * to keep the processor working properly in
@@ -179,28 +182,20 @@ void control::state_PREP_EXECUTION() {
         seletorMultiDM.write(0);
     // J operation
     } else if (opcode.read() == 10) {
-        enableCP.write(0);
-        loadCP.write(1);
-        jumpValueCP.write(opd);
-        state = &control::state_EXEC_JUMP;
+        prepareJump();
         restartPipe = true;
+        state = &control::state_EXEC_JUMP;
     // JN operation
     } else if (opcode.read() == 11) {
         if (N.read() == 1) {
-            jumpValueCP.write(opd);
-            enableCP.write(0);
-            loadCP.write(1);
-            resetZN.write(1);
+            prepareConditionalJump();
             restartPipe = true;
         }
         state = &control::state_EXEC_JUMP;
     // JZ operation
     } else if (opcode.read() == 12) {
         if (Z.read() == 1) {
-            jumpValueCP.write(opd);
-            enableCP.write(0);
-            loadCP.write(1);
-            resetZN.write(1);
+            prepareConditionalJump();
             restartPipe = true;
         }
         state = &control::state_EXEC_JUMP;
@@ -270,3 +265,13 @@ void control::stopPipePropagation() {
 	enableRI.write(0);	
 }
 
+void control::prepareJump() {
+    enableCP.write(0);
+    loadCP.write(1);
+    jumpValueCP.write(opd);    
+}
+
+void control::prepareConditionalJump() {
+    prepareJump();
+    resetZN.write(1);
+}
