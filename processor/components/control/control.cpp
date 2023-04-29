@@ -138,12 +138,12 @@ void control::state_LOAD_IR() {
 }
 
 void control::state_LOAD_RPL() {
-    if (!restartPipe) {
+    if (restartPipe) {
+        restartPipe = false;
+        state = &control::state_READ_IM;
+    } else { 
         prepareRItoRPL();
         state = &control::state_READ_NEXT_INST;
-    } else { 
-        state = &control::state_READ_IM;
-        restartPipe = false;
     }
 }
 
