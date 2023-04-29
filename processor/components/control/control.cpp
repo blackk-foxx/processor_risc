@@ -70,7 +70,7 @@ SC_MODULE(control) {
 
 	private:
 		//-- Local variables --//
-		int curState = 0;
+        void (control::*state)() = &control::state_READ_IM;
 		bool restartPipe = false;
         unsigned cycleCount = 0;
 
@@ -97,7 +97,7 @@ SC_MODULE(control) {
 		 * before the pipeline register (for pipeline purposes
 		 * only).
 		 * **/
-		void afterRIWrite();
+		void stopPipePropagation();
 
 		/* The Mealy's state machine: uses the current
 		 * state and informations from outside in order
@@ -106,8 +106,146 @@ SC_MODULE(control) {
 		 * **/
 		void state_machine();
 
+        void state_READ_IM();
+        void state_LOAD_IR();
+        void state_LOAD_RPL();
+        void state_READ_NEXT_INST();
+        void state_PREP_EXECUTION();
+        void state_EXEC_ALU();
+        void state_EXEC_STORE();
+        void state_EXEC_JUMP();
+        void state_STORE_ALU_RESULTS();
+        void state_EXEC_LOAD();
 
 };
+
+void control::state_machine() {
+    ++cycleCount;
+    (*this.*state)();
+}
+
+void control::state_READ_IM() {
+    prepareInstToBus();
+    state = &control::state_LOAD_IR;
+}
+
+void control::state_LOAD_IR() {
+    prepareInstBusToRI();
+    state = &control::state_LOAD_RPL;
+}
+
+void control::state_LOAD_RPL() {
+    if (!restartPipe) {
+        prepareRItoRPL();
+        state = &control::state_READ_NEXT_INST;
+    } else { 
+        state = &control::state_READ_IM;
+        restartPipe = false;
+    }
+}
+
+void control::state_READ_NEXT_INST() {
+    enableRPL.write(0);
+    prepareInstToBus(); // Take new instruction (pipeline)
+    state = &control::state_PREP_EXECUTION;
+}
+
+void control::state_PREP_EXECUTION() {
+    prepareInstBusToRI(); // Put new instruction on RI (pipeline)
+    
+    // Load operations: can be LRI (immediate) or LD
+    if (opcode.read() == 8 || opcode.read() == 13) {
+        enableRB.write(1);
+        writeRB.write(1);
+        // LRI operation
+        if (opcode.read() == 13) {
+            immediateRegister.write(opd.read());
+            immediateValue.write(of1.read());
+            seletorMultiRBW.write(2);
+            state = &control::state_STORE_ALU_RESULTS;
+        // LD operation
+        } else if (opcode.read() == 8) {
+            enableDM.write(1);
+            writeDM.write(0);
+            seletorMultiRBW.write(1);
+            seletorMultiDM.write(1);
+            state = &control::state_EXEC_LOAD;
+        }
+    // ST operation
+    } else if (opcode.read() == 9) {
+        enableRB.write(1);
+        writeRB.write(0);
+        state = &control::state_EXEC_STORE;
+        seletorMultiDM.write(0);
+    // J operation
+    } else if (opcode.read() == 10) {
+        enableCP.write(0);
+        loadCP.write(1);
+        jumpValueCP.write(opd);
+        state = &control::state_EXEC_JUMP;
+        restartPipe = true;
+    // JN operation
+    } else if (opcode.read() == 11) {
+        if (N.read() == 1) {
+            jumpValueCP.write(opd);
+            enableCP.write(0);
+            loadCP.write(1);
+            resetZN.write(1);
+            restartPipe = true;
+        }
+        state = &control::state_EXEC_JUMP;
+    // JZ operation
+    } else if (opcode.read() == 12) {
+        if (Z.read() == 1) {
+            jumpValueCP.write(opd);
+            enableCP.write(0);
+            loadCP.write(1);
+            resetZN.write(1);
+            restartPipe = true;
+        }
+        state = &control::state_EXEC_JUMP;
+    // ULA operations
+    } else if (opcode.read() != 0) {
+        seletorMultiRBW.write(0);
+        enableRB.write(1);
+        writeRB.write(0);
+        state = &control::state_EXEC_ALU;
+    } else if (opcode.read() == 0) {
+        sc_stop();
+    }
+}
+
+void control::state_EXEC_ALU() {
+    enableRB.write(1);
+    writeRB.write(1);
+    stopPipePropagation();
+    state = &control::state_STORE_ALU_RESULTS;
+}
+
+void control::state_EXEC_STORE() {
+    enableDM.write(1);
+    writeDM.write(1);
+    stopPipePropagation();
+    state = &control::state_STORE_ALU_RESULTS;
+}
+
+void control::state_EXEC_JUMP() {
+    loadCP.write(0);
+    state = &control::state_LOAD_RPL;
+}
+
+void control::state_STORE_ALU_RESULTS() {
+    enableRB.write(0);
+    enableDM.write(0);
+    stopPipePropagation();
+    state = &control::state_LOAD_RPL;
+}
+
+void control::state_EXEC_LOAD() {
+    enableRB.write(1);
+    writeRB.write(1);
+    state = &control::state_STORE_ALU_RESULTS;
+}
 
 void control::prepareInstToBus() {
 	enableIM.write(1);	// Enable IM
@@ -128,135 +266,7 @@ void control::prepareRItoRPL() {
 	writeRPL.write(1);	// Write pipeline register
 }
 
-void control::afterRIWrite() {
+void control::stopPipePropagation() {
 	enableRI.write(0);	
 }
 
-void control::state_machine() {
-    ++cycleCount;
-	switch(curState) {
-		// Write instruction in the bus
-		case 0:
-			prepareInstToBus();
-			curState = 1;
-		break;
-		// Once the instruction is in the bus, we write it into the RI
-		case 1:
-			prepareInstBusToRI();
-			curState = 2;
-		break;
-		// Once in the IR and in the bus for decoding, write at pipeline decoded
-		case 2:
-			if (!restartPipe) {
-				prepareRItoRPL();
-				curState = 3;
-			} else { 
-				curState = 0;
-				restartPipe = false;
-			}
-		break;
-		// Written in pipeline
-		case 3:
-			enableRPL.write(0);
-			curState = 5;
-			prepareInstToBus(); // Take new instruction (pipeline)
-		break;
-		// Prepare execution
-		case 5:
-			prepareInstBusToRI(); // Put new instruction on RI (pipeline)
-			
-			// Load operations: can be LRI (immediate) or LD
-			if (opcode.read() == 8 || opcode.read() == 13) {
-				enableRB.write(1);
-				writeRB.write(1);
-				// LRI operation
-				if (opcode.read() == 13) {
-					immediateRegister.write(opd.read());
-					immediateValue.write(of1.read());
-					seletorMultiRBW.write(2);
-					curState = 9;
-				// LD operation
-				} else if (opcode.read() == 8) {
-					enableDM.write(1);
-					writeDM.write(0);
-					seletorMultiRBW.write(1);
-					seletorMultiDM.write(1);
-					curState = 10;
-				}
-			// ST operation
-			} else if (opcode.read() == 9) {
-				enableRB.write(1);
-				writeRB.write(0);
-				curState = 7;
-				seletorMultiDM.write(0);
-			// J operation
-			} else if (opcode.read() == 10) {
-				enableCP.write(0);
-				loadCP.write(1);
-				jumpValueCP.write(opd);
-				curState = 8; 
-				restartPipe = true;
-			// JN operation
-			} else if (opcode.read() == 11) {
-				if (N.read() == 1) {
-					jumpValueCP.write(opd);
-					enableCP.write(0);
-					loadCP.write(1);
-					resetZN.write(1);
-					restartPipe = true;
-				}
-				curState = 8; 
-			// JZ operation
-			} else if (opcode.read() == 12) {
-				if (Z.read() == 1) {
-					jumpValueCP.write(opd);
-					enableCP.write(0);
-					loadCP.write(1);
-					resetZN.write(1);
-					restartPipe = true;
-				}
-				curState = 8;
-			// ULA operations
-			} else if (opcode.read() != 0) {
-				seletorMultiRBW.write(0);
-				enableRB.write(1);
-				writeRB.write(0);
-				curState = 6;
-			} else if (opcode.read() == 0) {
-				sc_stop();
-			}
-		break;
-		// Execute ULA operations
-		case 6:
-			enableRB.write(1);
-			writeRB.write(1);
-			curState = 9;
-			afterRIWrite(); // Stop pipe propagation
-		break;
-		// Execute ST operation
-		case 7:
-			enableDM.write(1);
-			writeDM.write(1);
-			curState = 9;
-			afterRIWrite(); // Stop pipe propagation
-		break;
-		// Execute jumps
-		case 8:
-			loadCP.write(0);
-			curState = 2;
-		break;
-		// Store results from ULA operations
-		case 9:
-			enableRB.write(0);
-			enableDM.write(0);
-			curState = 2;
-			afterRIWrite(); // Stop pipe propagation
-		break;
-		// Execute LD operation
-		case 10:
-			enableRB.write(1);
-			writeRB.write(1);
-			curState = 9;
-		break;
-	}
-}
