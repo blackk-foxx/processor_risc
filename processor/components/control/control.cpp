@@ -107,6 +107,14 @@ SC_MODULE(control) {
         void prepareWriteDM();
 
         void handleOpcode(unsigned opcode);
+        void handle_LRI();
+        void handle_LD();
+        void handle_ST();
+        void handle_J();
+        void handle_JN();
+        void handle_JZ();
+        void handle_HALT();
+        void handle_ALU_operation();
 
 		/* The Mealy's state machine: uses the current
 		 * state and informations from outside in order
@@ -174,44 +182,83 @@ void control::state_READY_TO_EXECUTE() {
     handleOpcode(opcode.read());
 }
 
+void control::handle_LRI()
+{
+    prepareWriteRB();
+    immediateRegister.write(opd.read());
+    immediateValue.write(of1.read());
+    seletorMultiRBW.write(2);
+    state = &control::state_RESULT_READY;
+}
+
+void control::handle_LD()
+{
+    prepareWriteRB();
+    prepareReadDM();
+    seletorMultiRBW.write(1);
+    seletorMultiDM.write(1);
+    state = &control::state_READY_TO_LOAD;
+}
+
+void control::handle_ST()
+{
+    prepareReadRB();
+    seletorMultiDM.write(0);
+    state = &control::state_READY_TO_STORE;
+}
+
+void control::handle_J()
+{
+    prepareJump();
+    state = &control::state_READY_TO_JUMP;
+}
+
+void control::handle_JN()
+{
+    if (N.read() == 1) {
+        prepareConditionalJump();
+    }
+    state = &control::state_READY_TO_JUMP;
+}
+
+void control::handle_JZ()
+{
+    if (Z.read() == 1) {
+        prepareConditionalJump();
+    }
+    state = &control::state_READY_TO_JUMP;
+}
+
+void control::handle_HALT()
+{
+    sc_stop();
+}
+
+void control::handle_ALU_operation()
+{
+    seletorMultiRBW.write(0);
+    prepareReadRB();
+    state = &control::state_READY_TO_COMPUTE;
+}
+
 void control::handleOpcode(unsigned opcode) 
 {
     if (opcode == opcode::LRI) {
-        prepareWriteRB();
-        immediateRegister.write(opd.read());
-        immediateValue.write(of1.read());
-        seletorMultiRBW.write(2);
-        state = &control::state_RESULT_READY;
+        handle_LRI();
     } else if (opcode == opcode::LD) {
-        prepareWriteRB();
-        prepareReadDM();
-        seletorMultiRBW.write(1);
-        seletorMultiDM.write(1);
-        state = &control::state_READY_TO_LOAD;
+        handle_LD();
     } else if (opcode == opcode::ST) {
-        prepareReadRB();
-        seletorMultiDM.write(0);
-        state = &control::state_READY_TO_STORE;
+        handle_ST();
     } else if (opcode == opcode::J) {
-        prepareJump();
-        state = &control::state_READY_TO_JUMP;
+        handle_J();
     } else if (opcode == opcode::JN) {
-        if (N.read() == 1) {
-            prepareConditionalJump();
-        }
-        state = &control::state_READY_TO_JUMP;
+        handle_JN();
     } else if (opcode == opcode::JZ) {
-        if (Z.read() == 1) {
-            prepareConditionalJump();
-        }
-        state = &control::state_READY_TO_JUMP;
+        handle_JZ();
     } else if (opcode == opcode::HALT) {
-        sc_stop();
+        handle_HALT();
     } else {
-        // ULA operations
-        seletorMultiRBW.write(0);
-        prepareReadRB();
-        state = &control::state_READY_TO_COMPUTE;
+        handle_ALU_operation();
     }
 }
 
