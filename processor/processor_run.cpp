@@ -11,11 +11,7 @@
 
 int sc_main(int argn, char * argc[])
 {
-	cout << "Loading processor..." << endl;
-	sleep(1);
-
 	processor p("PROC", argc[1]);
-
     sc_start();
 
     cout << endl;

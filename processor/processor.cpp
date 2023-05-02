@@ -158,9 +158,6 @@ SC_MODULE(processor) {
 	 * Always called when constructing the processor.
 	 * */
 	processor(sc_module_name _name, const char * instructionsPath) : sc_module{_name} {
-		sleep(1);
-		cout << "\nThe processor is ready to work." << endl;
-		sleep(1);
 
 		//-- Connections --//
 		
@@ -310,11 +307,8 @@ SC_MODULE(processor) {
 		ifs.open(instructionsPath,std::ifstream::in);
 
 		cout << " ~~~~---------------------------~~~~" << endl;
-		cout << "Attempting to find instructions..." << endl;
-		sleep(1);
 		if (ifs.is_open()) {
-			cout << "Found! Reading instructions..." << endl;
-			sleep(1);
+			cout << "Reading instructions from " << instructionsPath << "..." << endl;
 			while (getline(ifs,inst)) {
 				std::size_t found = inst.find("#");
 				if(found != std::string::npos && found != 0){
@@ -326,7 +320,6 @@ SC_MODULE(processor) {
 				}
 			}
 			cout << "Loading into instruction memory..." << endl;
-			sleep(1);
 			IM.updateMemory(instructions); // Update memory
 			cout << "Done! Instructions to be processed:" << endl;
 			for (int i = 0; i < instructions.size(); ++i) {
@@ -336,7 +329,6 @@ SC_MODULE(processor) {
 			cout << "Error! Cannot find file with instructions." << endl;
 		}
 		cout << " ~~~~---------------------------~~~~" << endl << endl;
-		sleep(1);
 	}
 };
 
